@@ -53,6 +53,15 @@ Ember.Widgets.TextEditorComponent = Ember.Component.extend
     {size:'7', name: '36'}
   ]
 
+  init: ->
+    @_super()
+    document.execCommand 'styleWithCSS', true, true
+
+    # Defines commands in @get('commands'), such as fontName and fontSize
+    @get('commands').forEach (command) =>
+      @set command, (arg) ->
+        document.execCommand command, true, arg
+
   # Returns true if the entire range is in the text editor
   inEditor: (range) ->
     @$(range.endContainer).parents().has(range.startContainer).first().closest('.' + @EDITOR_CLASS).length > 0
@@ -73,15 +82,6 @@ Ember.Widgets.TextEditorComponent = Ember.Component.extend
     @fontSize @get('selectedFontSize')
   , 'selectedFontSize'
 
-  init: ->
-    @_super()
-    document.execCommand 'styleWithCSS', true, true
-
-    # Defines commands in @get('commands'), such as fontName and fontSize
-    @get('commands').forEach (command) =>
-      @set command, (arg) ->
-        document.execCommand command, true, arg
-
   keyUp: (event) ->
     @queryCommandState()
 
@@ -100,6 +100,7 @@ Ember.Widgets.TextEditorComponent = Ember.Component.extend
     # Font names with spaces need to have the start and end quotes removed
     @set 'selectedFontName', document.queryCommandValue('fontName').replace(/^'/, '').replace(/'$/, '')
     @set 'selectedFontSize', document.queryCommandValue('fontSize')
+
 
 Ember.Widgets.DomHelper = Ember.Mixin.create
   KEY_CODES: {
@@ -187,6 +188,26 @@ Ember.Widgets.DomHelper = Ember.Mixin.create
         sideNode = sideNode.children[index]
     return sideNode
 
+  getCharacterPrecedingCaret: (container) ->
+    precedingChars = @getCharactersPrecedingCaret(container)
+    return precedingChars.slice(-1)
+
+  getCharactersPrecedingCaret: (container) ->
+    if window.getSelection
+      sel = window.getSelection()
+      if sel.rangeCount > 0
+        range = sel.getRangeAt(0).cloneRange()
+        range.collapse(true)
+        range.setStart(container, 0)
+        precedingChars = range.toString()
+    else if (sel = document.selection) && sel.type != "Control"
+      range = sel.createRange()
+      precedingRange = range.duplicate()
+      precedingRange.moveToElementText(container)
+      precedingRange.setEndPoint("EndToStart", range)
+      precedingChars = precedingRange.text
+    return precedingChars
+
 # Base class for NonEditablePill that can be inserted into the TextEditorWithNonEditableComponent
 Ember.Widgets.BaseNonEditablePill = Ember.Controller.extend Ember.Widgets.DomHelper,
 
@@ -261,8 +282,10 @@ Ember.Widgets.TextEditorWithNonEditableComponent =
 Ember.Widgets.TextEditorComponent.extend Ember.Widgets.DomHelper,
   pillId:           0
   INVISIBLE_CHAR:   '\uFEFF'
+  INSERT_PILL_CHAR: '='
   mouseDownTarget:  null
   lastSelection:    null
+  pillHideSearchBox: false
 
   pillOptions: [Ember.Widgets.TodaysDate, Ember.Widgets.NonEditableTextPill]
 
@@ -524,6 +547,7 @@ Ember.Widgets.TextEditorComponent.extend Ember.Widgets.DomHelper,
     return unless @isTargetInEditor(event)
     @moveSelection()
     @saveSelection()
+    @handlePillConfig()
     @_super()
 
   mouseDown: (event) ->
@@ -542,3 +566,15 @@ Ember.Widgets.TextEditorComponent.extend Ember.Widgets.DomHelper,
       event.preventDefault()
     @saveSelection()
     @_super()
+
+  handlePillConfig: ->
+    precedingCharacters = this.getCharactersPrecedingCaret(@$('.' + @EDITOR_CLASS)[0])
+    showPillConfig = precedingCharacters.match RegExp("=\\w*$")
+    if showPillConfig
+      @set 'showConfigPopover', true
+      @set 'pillHideSearchBox', true
+      @set 'query', showPillConfig[0].split(" ").reverse()[0].slice(1)
+    else
+      @set 'showConfigPopover', false
+      @set 'pillHideSearchBox', false
+      @set 'query', null

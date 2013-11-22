@@ -65,6 +65,9 @@
   <div class="btn-group">
     {{select-component
       class="insert-non-editable-btn"
+      isSelectBinding="pillHideSearchBox"
+      queryBinding="query"
+      showDropdownBinding="showConfigPopover"
       contentBinding="_pillOptions"
       prompt="Insert non-editable"
       optionLabelPath="name"
